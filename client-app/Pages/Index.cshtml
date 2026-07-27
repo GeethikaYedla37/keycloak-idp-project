@@ -1,0 +1,298 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Zero Trust Identity Demo";
+    var groupClaims = User.Claims.Where(c => c.Type == "groups").ToList();
+    var isAuthed = User.Identity?.IsAuthenticated ?? false;
+    var role = Model.PrimaryGroup;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #64748b;
+            --border: #e2e8f0;
+            --surface: #ffffff;
+            --bg: #f1f5f9;
+            --brand: #4f46e5;
+            --brand-dark: #3730a3;
+            --brand-bg: #eef2ff;
+            --ok: #059669;
+            --ok-bg: #ecfdf5;
+            --bad: #dc2626;
+            --bad-bg: #fef2f2;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            margin: 0;
+            padding: 32px 20px 64px;
+        }
+        .page { max-width: 760px; margin: 0 auto; }
+        .hero {
+            background: linear-gradient(135deg, var(--brand-dark), var(--brand));
+            color: white;
+            border-radius: 16px;
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 24px -8px rgba(79, 70, 229, 0.5);
+        }
+        .hero .kicker {
+            text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px;
+            font-weight: 600; opacity: 0.8; margin: 0 0 6px;
+        }
+        .hero h1 { margin: 0 0 8px; font-size: 26px; }
+        .hero p { margin: 0; opacity: 0.9; font-size: 14px; line-height: 1.5; max-width: 60ch; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 22px 26px; margin-bottom: 20px;
+        }
+        .card h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+        .card .card-desc { color: var(--muted); font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
+        .card .card-note {
+            color: var(--muted); font-size: 12px; margin: 14px 0 0; padding-top: 12px;
+            border-top: 1px dashed var(--border); line-height: 1.5;
+        }
+
+        .identity-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .avatar {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: var(--brand-bg); color: var(--brand-dark);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 17px; flex-shrink: 0;
+        }
+        .identity-name { display: flex; align-items: center; gap: 12px; }
+        .identity-name .username { font-weight: 600; font-size: 16px; }
+        .identity-name .role-hint { color: var(--muted); font-size: 13px; }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 20px; border-radius: 8px;
+            background: var(--brand); color: white; text-decoration: none;
+            font-weight: 600; font-size: 14px; border: none; cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn:hover { background: var(--brand-dark); }
+        .btn.logout { background: transparent; color: var(--ink); border: 1px solid var(--border); }
+        .btn.logout:hover { background: #f8fafc; }
+        .btn-mini {
+            padding: 5px 12px; font-size: 12px; border-radius: 6px;
+            border: 1px solid var(--border); background: #fff; color: var(--muted);
+            cursor: not-allowed;
+        }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--brand-bg); color: var(--brand-dark);
+            padding: 5px 14px; border-radius: 20px; margin-right: 8px;
+            font-size: 13px; font-weight: 600;
+        }
+        .badge::before { content: "●"; font-size: 8px; }
+
+        .status-ok, .status-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 11px; border-radius: 20px; font-size: 12px; font-weight: 600;
+        }
+        .status-ok { background: var(--ok-bg); color: var(--ok); }
+        .status-pill.success { background: var(--ok-bg); color: var(--ok); }
+        .status-pill.fail { background: var(--bad-bg); color: var(--bad); }
+        .status-pill.warn { background: #fffbeb; color: #b45309; }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+        .stat-tile { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+        .stat-tile .num { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+        .stat-tile .label { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+        table { border-collapse: collapse; width: 100%; margin-top: 4px; font-size: 13px; }
+        th, td { border-bottom: 1px solid var(--border); padding: 9px 8px; text-align: left; word-break: break-all; vertical-align: middle; }
+        th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+        td:first-child { color: var(--brand-dark); font-weight: 600; white-space: nowrap; }
+        tr:last-child td { border-bottom: none; }
+
+        details { margin-top: 4px; }
+        summary {
+            cursor: pointer; font-size: 13px; font-weight: 600; color: var(--brand-dark);
+            padding: 4px 0;
+        }
+        summary::marker { color: var(--muted); }
+
+        .empty-state { text-align: center; padding: 8px 0 4px; }
+        .empty-state p { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+
+        .footnote { color: var(--muted); font-size: 12px; text-align: center; margin-top: 28px; line-height: 1.6; }
+        .footnote code { background: #e2e8f0; padding: 1px 5px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <div class="hero">
+        <p class="kicker">OIDC Relying Party &middot; client_id: ztna-app</p>
+        <h1>Zero Trust Identity Demo</h1>
+        <p>
+            This app never sees your password. It redirects you to the Keycloak
+            Identity Provider to authenticate, then trusts the signed token
+            Keycloak hands back &mdash; including which group you belong to.
+        </p>
+    </div>
+
+    @if (isAuthed)
+    {
+        <div class="card">
+            <div class="identity-row">
+                <div class="identity-name">
+                    <div class="avatar">@(User.Identity!.Name?.Substring(0, 1).ToUpper())</div>
+                    <div>
+                        <div class="username">@User.Identity.Name</div>
+                        <div class="role-hint">Authenticated via Keycloak &middot; group: @(role ?? "none")</div>
+                    </div>
+                </div>
+                <a class="btn logout" href="/Account/Logout">Sign out</a>
+            </div>
+        </div>
+
+        @if (role == "Admins")
+        {
+            <div class="card">
+                <h2>Admin Dashboard</h2>
+                <p class="card-desc">Full visibility across every user and group in this realm.</p>
+                <div class="stat-grid">
+                    <div class="stat-tile"><div class="num">3</div><div class="label">Total users</div></div>
+                    <div class="stat-tile"><div class="num">3</div><div class="label">Groups</div></div>
+                    <div class="stat-tile"><div class="num">1</div><div class="label">Active session</div></div>
+                </div>
+                <table>
+                    <tr><th>User</th><th>Group</th><th>Status</th><th></th></tr>
+                    <tr><td>alice</td><td>Admins</td><td><span class="status-pill success">You</span></td><td><button class="btn-mini" disabled title="Demo UI only">Manage</button></td></tr>
+                    <tr><td>bob</td><td>Developers</td><td><span class="status-pill success">Active</span></td><td><button class="btn-mini" disabled title="Demo UI only">Manage</button></td></tr>
+                    <tr><td>carol</td><td>Auditors</td><td><span class="status-pill success">Active</span></td><td><button class="btn-mini" disabled title="Demo UI only">Manage</button></td></tr>
+                </table>
+                <p class="card-note">
+                    Illustrative content &mdash; this table is static UI, not a live query.
+                    What's real is the routing decision itself: you're seeing this exact
+                    screen because your signed token's <code>groups</code> claim says
+                    <code>Admins</code>, and only Keycloak can issue that claim.
+                </p>
+            </div>
+        }
+        else if (role == "Developers")
+        {
+            <div class="card">
+                <h2>Developer Tools</h2>
+                <p class="card-desc">Deployment status and service health for your team.</p>
+                <div class="stat-grid">
+                    <div class="stat-tile"><div class="num">2</div><div class="label">Environments</div></div>
+                    <div class="stat-tile"><div class="num">Today</div><div class="label">Last deploy</div></div>
+                    <div class="stat-tile"><div class="num">Passing</div><div class="label">Build status</div></div>
+                </div>
+                <table>
+                    <tr><th>Service</th><th>Version</th><th>Status</th></tr>
+                    <tr><td>auth-service</td><td>v1.4.2</td><td><span class="status-pill success">Success</span></td></tr>
+                    <tr><td>billing-api</td><td>v2.1.0</td><td><span class="status-pill success">Success</span></td></tr>
+                    <tr><td>notifications</td><td>v0.9.3</td><td><span class="status-pill fail">Failed</span></td></tr>
+                </table>
+                <p class="card-note">
+                    Illustrative content &mdash; static sample data, not a live CI feed.
+                    What's real is the routing decision itself: you're seeing this exact
+                    screen because your signed token's <code>groups</code> claim says
+                    <code>Developers</code>.
+                </p>
+            </div>
+        }
+        else if (role == "Auditors")
+        {
+            <div class="card">
+                <h2>Audit &amp; Compliance</h2>
+                <p class="card-desc">Recent authentication activity across the realm.</p>
+                <div class="stat-grid">
+                    <div class="stat-tile"><div class="num">zerotrust-realm</div><div class="label">Realm</div></div>
+                    <div class="stat-tile"><div class="num">3</div><div class="label">Groups monitored</div></div>
+                    <div class="stat-tile"><div class="num">Admins</div><div class="label">MFA enforced on</div></div>
+                </div>
+                <table>
+                    <tr><th>User</th><th>Event</th><th>Result</th></tr>
+                    <tr><td>bob</td><td>Login</td><td><span class="status-pill success">Success</span></td></tr>
+                    <tr><td>alice</td><td>MFA enrollment</td><td><span class="status-pill warn">Required</span></td></tr>
+                    <tr><td>unknown</td><td>Login (wrong password)</td><td><span class="status-pill fail">Rejected</span></td></tr>
+                </table>
+                <p class="card-note">
+                    Illustrative content &mdash; static sample log, not wired to Keycloak's
+                    real event store yet (that integration is listed as future work).
+                    What's real is the routing decision itself: you're seeing this exact
+                    screen because your signed token's <code>groups</code> claim says
+                    <code>Auditors</code>.
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="card">
+                <h2>No group assigned</h2>
+                <p class="card-desc">
+                    Your token doesn't carry a recognized <code>groups</code> claim, so
+                    there's no role-specific screen to route you to.
+                </p>
+            </div>
+        }
+
+        <div class="card">
+            <h2>Group membership <span class="status-ok">from token claim</span></h2>
+            <p class="card-desc">
+                The custom <code>groups</code> claim added by the protocol mapper
+                (Milestone 4) &mdash; this single value is what decided which screen
+                you saw above.
+            </p>
+            @if (groupClaims.Any())
+            {
+                foreach (var g in groupClaims)
+                {
+                    <span class="badge">@g.Value</span>
+                }
+            }
+            else
+            {
+                <p><em>No group claim found &mdash; check the protocol mapper configuration on the ztna-app client.</em></p>
+            }
+
+            <details>
+                <summary>Show the full raw signed token (technical proof)</summary>
+                <table style="margin-top:12px;">
+                    <tr><th>Claim</th><th>Value</th></tr>
+                    @foreach (var claim in User.Claims)
+                    {
+                        <tr><td>@claim.Type</td><td>@claim.Value</td></tr>
+                    }
+                </table>
+            </details>
+        </div>
+    }
+    else
+    {
+        <div class="card empty-state">
+            <h2 style="justify-content:center; margin-bottom:10px;">You're not signed in yet</h2>
+            <p>
+                Clicking below sends you to Keycloak's own login page (not this
+                app's) &mdash; that's the point of OIDC. This app finds out who
+                you are only after Keycloak vouches for you.
+            </p>
+            <a class="btn" href="/Account/Login">Sign in with Keycloak &rarr;</a>
+        </div>
+    }
+
+    <p class="footnote">
+        Test accounts: <code>alice</code> / Admins &middot; <code>bob</code> / Developers &middot; <code>carol</code> / Auditors
+        &mdash; password <code>Passw0rd!</code> for all three. Alice will be asked to set up MFA on first login.
+    </p>
+
+</div>
+</body>
+</html>

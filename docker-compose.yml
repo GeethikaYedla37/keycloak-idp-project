@@ -1,0 +1,74 @@
+version: "3.8"
+
+# =============================================================================
+# Milestone 2: Deploying the Keycloak Server
+# -----------------------------------------------------------------------------
+# This stack runs:
+#   1. postgres  -> persistent database backing Keycloak (realms, users, etc.)
+#   2. keycloak  -> the Identity Provider (IdP) itself, in dev/start mode
+#
+# Start with:   docker compose up -d
+# View logs:    docker compose logs -f keycloak
+# Stop:         docker compose down
+# Wipe data:    docker compose down -v
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: idp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_db_pw   # dev-only, change for real deployments
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - idp-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: keycloak
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # --- Admin bootstrap account (Milestone 2) ---
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin_change_me
+
+      # --- Database connection ---
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_db_pw
+
+      # --- Networking / access (dev settings; tighten for production) ---
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    command: start-dev
+    ports:
+      - "9090:8080"   # Admin console + realm endpoints: http://localhost:9090
+                        # (8081-8180 is blocked by a Windows excluded port range on this host)
+    networks:
+      - idp-net
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo OK"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pgdata:
+
+networks:
+  idp-net:
+    driver: bridge
